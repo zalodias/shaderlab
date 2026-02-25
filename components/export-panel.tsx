@@ -1,43 +1,56 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import { GradientConfig, SizePreset } from "@/lib/types";
-import { exportPng, exportSvg, exportCss, exportJson } from "@/lib/export";
+import { exportCss, exportJson, exportPng, exportSvg } from '@/lib/export'
+import { GradientConfig, SizePreset } from '@/lib/types'
+import { useState } from 'react'
 
 const SIZE_PRESETS: SizePreset[] = [
-  { label: "1:1", width: 1080, height: 1080 },
-  { label: "4:3", width: 1600, height: 1200 },
-  { label: "3:4", width: 1200, height: 1600 },
-  { label: "16:9", width: 1920, height: 1080 },
-  { label: "9:16", width: 1080, height: 1920 },
-  { label: "3:2", width: 1500, height: 1000 },
-  { label: "2:3", width: 1000, height: 1500 },
-];
+  { label: '1:1', width: 1080, height: 1080 },
+  { label: '4:3', width: 1600, height: 1200 },
+  { label: '3:4', width: 1200, height: 1600 },
+  { label: '16:9', width: 1920, height: 1080 },
+  { label: '9:16', width: 1080, height: 1920 },
+  { label: '3:2', width: 1500, height: 1000 },
+  { label: '2:3', width: 1000, height: 1500 },
+]
 
 interface ExportPanelProps {
-  config: GradientConfig;
+  config: GradientConfig
 }
 
-export default function ExportPanel({ config }: ExportPanelProps) {
-  const [selectedPreset, setSelectedPreset] = useState<SizePreset>(SIZE_PRESETS[3]);
-  const [customWidth, setCustomWidth] = useState("1920");
-  const [customHeight, setCustomHeight] = useState("1080");
-  const [useCustom, setUseCustom] = useState(false);
-  const [exporting, setExporting] = useState<string | null>(null);
+export function ExportPanel({ config }: ExportPanelProps) {
+  const [selectedPreset, setSelectedPreset] = useState<SizePreset>(SIZE_PRESETS[3])
+  const [customWidth, setCustomWidth] = useState('1920')
+  const [customHeight, setCustomHeight] = useState('1080')
+  const [useCustom, setUseCustom] = useState(false)
+  const [exporting, setExporting] = useState<string | null>(null)
 
-  const exportWidth = useCustom ? parseInt(customWidth) || 1920 : selectedPreset.width;
-  const exportHeight = useCustom ? parseInt(customHeight) || 1080 : selectedPreset.height;
+  const exportWidth = useCustom ? parseInt(customWidth) || 1920 : selectedPreset.width
+  const exportHeight = useCustom ? parseInt(customHeight) || 1080 : selectedPreset.height
 
   async function handleExport(format: string) {
-    setExporting(format);
+    setExporting(format)
     try {
-      if (format === "png") await exportPng(config, exportWidth, exportHeight);
-      else if (format === "svg") exportSvg(config, exportWidth, exportHeight);
-      else if (format === "css") exportCss(config);
-      else if (format === "json") exportJson(config);
+      if (format === 'png') await exportPng(config, exportWidth, exportHeight)
+      else if (format === 'svg') exportSvg(config, exportWidth, exportHeight)
+      else if (format === 'css') exportCss(config)
+      else if (format === 'json') exportJson(config)
     } finally {
-      setExporting(null);
+      setExporting(null)
     }
+  }
+
+  function handlePresetClick(preset: SizePreset) {
+    setSelectedPreset(preset)
+    setUseCustom(false)
+  }
+
+  function handleCustomWidthChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setCustomWidth(e.target.value)
+  }
+
+  function handleCustomHeightChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setCustomHeight(e.target.value)
   }
 
   return (
@@ -46,17 +59,16 @@ export default function ExportPanel({ config }: ExportPanelProps) {
         Export
       </span>
 
-      {/* Size selector */}
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap gap-1.5">
           {SIZE_PRESETS.map((p) => (
             <button
               key={p.label}
-              onClick={() => { setSelectedPreset(p); setUseCustom(false); }}
+              onClick={() => handlePresetClick(p)}
               className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
                 !useCustom && selectedPreset.label === p.label
-                  ? "bg-neutral-800 text-white"
-                  : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700"
+                  ? 'bg-neutral-800 text-white'
+                  : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700'
               }`}
             >
               {p.label}
@@ -66,8 +78,8 @@ export default function ExportPanel({ config }: ExportPanelProps) {
             onClick={() => setUseCustom(true)}
             className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
               useCustom
-                ? "bg-neutral-800 text-white"
-                : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700"
+                ? 'bg-neutral-800 text-white'
+                : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-700'
             }`}
           >
             Custom
@@ -79,7 +91,7 @@ export default function ExportPanel({ config }: ExportPanelProps) {
             <input
               type="number"
               value={customWidth}
-              onChange={(e) => setCustomWidth(e.target.value)}
+              onChange={handleCustomWidthChange}
               className="w-20 px-2 py-1.5 rounded-lg border border-neutral-200 text-xs font-mono text-neutral-700 bg-neutral-50 outline-none focus:border-neutral-400"
               placeholder="W"
               min={1}
@@ -88,7 +100,7 @@ export default function ExportPanel({ config }: ExportPanelProps) {
             <input
               type="number"
               value={customHeight}
-              onChange={(e) => setCustomHeight(e.target.value)}
+              onChange={handleCustomHeightChange}
               className="w-20 px-2 py-1.5 rounded-lg border border-neutral-200 text-xs font-mono text-neutral-700 bg-neutral-50 outline-none focus:border-neutral-400"
               placeholder="H"
               min={1}
@@ -104,13 +116,12 @@ export default function ExportPanel({ config }: ExportPanelProps) {
         )}
       </div>
 
-      {/* Format buttons */}
       <div className="grid grid-cols-2 gap-1.5">
         {[
-          { id: "png", label: "PNG" },
-          { id: "svg", label: "SVG" },
-          { id: "css", label: "CSS" },
-          { id: "json", label: "JSON" },
+          { id: 'png', label: 'PNG' },
+          { id: 'svg', label: 'SVG' },
+          { id: 'css', label: 'CSS' },
+          { id: 'json', label: 'JSON' },
         ].map(({ id, label }) => (
           <button
             key={id}
@@ -130,5 +141,5 @@ export default function ExportPanel({ config }: ExportPanelProps) {
         ))}
       </div>
     </div>
-  );
+  )
 }

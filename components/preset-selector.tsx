@@ -1,47 +1,43 @@
-"use client";
+'use client'
 
-import { useEffect, useRef } from "react";
-import { PRESETS, Preset } from "@/lib/presets";
-import { WebGLGradientRenderer } from "@/lib/webgl-renderer";
+import { PRESETS, Preset } from '@/lib/presets'
+import { WebGLGradientRenderer } from '@/lib/webgl-renderer'
+import { useEffect, useRef } from 'react'
 
 interface PresetSelectorProps {
-  onSelect: (preset: Preset) => void;
-  activePresetId: string | null;
+  onSelect: (preset: Preset) => void
+  activePresetId: string | null
 }
 
-function PresetThumbnail({
-  preset,
-  isActive,
-  onSelect,
-}: {
-  preset: Preset;
-  isActive: boolean;
-  onSelect: () => void;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+interface PresetThumbnailProps {
+  preset: Preset
+  isActive: boolean
+  onSelect: () => void
+}
+
+function PresetThumbnail({ preset, isActive, onSelect }: PresetThumbnailProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.width = 80;
-    canvas.height = 120;
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.width = 80
+    canvas.height = 120
     try {
-      const renderer = new WebGLGradientRenderer(canvas);
-      renderer.render(preset.config);
-      renderer.destroy();
-    } catch {
-      // WebGL unavailable — leave canvas blank
-    }
-  }, [preset]);
+      const renderer = new WebGLGradientRenderer(canvas)
+      renderer.render(preset.config)
+      renderer.destroy()
+    } catch {}
+  }, [preset])
 
   return (
     <button
       onClick={onSelect}
-      className={`flex flex-col items-center gap-1.5 group transition-all`}
+      className="flex flex-col items-center gap-1.5 group transition-all"
     >
       <div
         className={`rounded-xl overflow-hidden border-2 transition-all ${
-          isActive ? "border-neutral-800 shadow-md" : "border-transparent"
+          isActive ? 'border-neutral-800 shadow-md' : 'border-transparent'
         }`}
       >
         <canvas
@@ -53,16 +49,16 @@ function PresetThumbnail({
       </div>
       <span
         className={`text-[10px] font-medium text-center leading-tight transition-colors ${
-          isActive ? "text-neutral-800" : "text-neutral-400 group-hover:text-neutral-600"
+          isActive ? 'text-neutral-800' : 'text-neutral-400 group-hover:text-neutral-600'
         }`}
       >
         {preset.name}
       </span>
     </button>
-  );
+  )
 }
 
-export default function PresetSelector({
+export function PresetSelector({
   onSelect,
   activePresetId,
 }: PresetSelectorProps) {
@@ -82,5 +78,5 @@ export default function PresetSelector({
         ))}
       </div>
     </div>
-  );
+  )
 }

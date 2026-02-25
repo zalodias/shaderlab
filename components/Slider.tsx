@@ -1,16 +1,16 @@
-"use client";
+'use client'
 
 interface SliderProps {
-  label: string;
-  value: number;
-  min?: number;
-  max?: number;
-  step?: number;
-  onChange: (value: number) => void;
-  displayValue?: string;
+  label: string
+  value: number
+  min?: number
+  max?: number
+  step?: number
+  onChange: (value: number) => void
+  displayValue?: string
 }
 
-export default function Slider({
+export function Slider({
   label,
   value,
   min = 0,
@@ -19,6 +19,10 @@ export default function Slider({
   onChange,
   displayValue,
 }: SliderProps) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    onChange(parseFloat(e.target.value))
+  }
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
@@ -26,7 +30,7 @@ export default function Slider({
           {label}
         </span>
         <span className="text-xs font-mono text-neutral-400">
-          {displayValue ?? Math.round(value * 100) + "%"}
+          {displayValue ?? Math.round(value * 100) + '%'}
         </span>
       </div>
       <input
@@ -35,9 +39,9 @@ export default function Slider({
         max={max}
         step={step}
         value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
+        onChange={handleChange}
         className="w-full h-1.5 rounded-full appearance-none bg-neutral-200 accent-neutral-800 cursor-pointer"
       />
     </div>
-  );
+  )
 }
