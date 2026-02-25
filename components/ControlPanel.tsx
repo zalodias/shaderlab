@@ -57,7 +57,7 @@ export default function ControlPanel({
       <div className="px-4 pt-4 pb-3 border-b border-neutral-100">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-sm font-semibold text-neutral-800 tracking-tight">
-            Mesh Gradient (Canvas)
+            Mesh Gradient (WebGL)
           </h1>
           <button
             onClick={onRandomise}

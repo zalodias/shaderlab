@@ -9,7 +9,7 @@ import {
   useImperativeHandle,
 } from "react";
 import { ColorPoint, GradientConfig } from "@/lib/types";
-import { renderGradient } from "@/lib/gradient-renderer";
+import { WebGLGradientRenderer } from "@/lib/webgl-renderer";
 
 interface GradientCanvasProps {
   config: GradientConfig;
@@ -24,8 +24,8 @@ export interface GradientCanvasHandle {
   getCanvas: () => HTMLCanvasElement | null;
 }
 
-const HANDLE_RADIUS = 9;
-const HIT_RADIUS = 20;
+const HANDLE_SIZE = 18; // diameter in px
+const HIT_RADIUS = 20; // px hit slop
 
 const GradientCanvas = forwardRef<GradientCanvasHandle, GradientCanvasProps>(
   function GradientCanvas(
@@ -41,6 +41,7 @@ const GradientCanvas = forwardRef<GradientCanvasHandle, GradientCanvasProps>(
   ) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const rendererRef = useRef<WebGLGradientRenderer | null>(null);
     const draggingRef = useRef<string | null>(null);
     const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
@@ -48,7 +49,7 @@ const GradientCanvas = forwardRef<GradientCanvasHandle, GradientCanvasProps>(
       getCanvas: () => canvasRef.current,
     }));
 
-    // Resize canvas to fill container while maintaining aspect ratio
+    // --- Resize observer: maintain aspect ratio inside container ---
     useEffect(() => {
       const container = containerRef.current;
       if (!container) return;
@@ -75,67 +76,47 @@ const GradientCanvas = forwardRef<GradientCanvasHandle, GradientCanvasProps>(
       return () => observer.disconnect();
     }, [aspectRatio]);
 
-    // Re-render gradient whenever config or canvas size changes
+    // --- Initialise / re-initialise WebGL renderer when canvas size changes ---
     useEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
+
       canvas.width = canvasSize.width;
       canvas.height = canvasSize.height;
-      renderGradient(canvas, config);
-      drawHandles(canvas, config.points, selectedPointId);
-    }, [config, canvasSize, selectedPointId]);
 
-    function drawHandles(
-      canvas: HTMLCanvasElement,
-      points: ColorPoint[],
-      selectedId: string | null
-    ) {
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      for (const point of points) {
-        const cx = point.x * canvas.width;
-        const cy = point.y * canvas.height;
-        const isSelected = point.id === selectedId;
-
-        // Outer glow ring
-        ctx.beginPath();
-        ctx.arc(cx, cy, HANDLE_RADIUS + 3, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(255,255,255,0.35)";
-        ctx.fill();
-
-        // Colour fill
-        ctx.beginPath();
-        ctx.arc(cx, cy, HANDLE_RADIUS, 0, Math.PI * 2);
-        ctx.fillStyle = point.color;
-        ctx.fill();
-
-        // Border
-        ctx.beginPath();
-        ctx.arc(cx, cy, HANDLE_RADIUS, 0, Math.PI * 2);
-        ctx.strokeStyle = isSelected ? "#ffffff" : "rgba(255,255,255,0.7)";
-        ctx.lineWidth = isSelected ? 2.5 : 1.5;
-        ctx.stroke();
-
-        // Selection ring
-        if (isSelected) {
-          ctx.beginPath();
-          ctx.arc(cx, cy, HANDLE_RADIUS + 5, 0, Math.PI * 2);
-          ctx.strokeStyle = "rgba(255,255,255,0.8)";
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        }
+      // Destroy previous renderer before creating a new one
+      rendererRef.current?.destroy();
+      try {
+        rendererRef.current = new WebGLGradientRenderer(canvas);
+      } catch (err) {
+        console.error("WebGL init failed:", err);
+        rendererRef.current = null;
       }
-    }
 
+      return () => {
+        rendererRef.current?.destroy();
+        rendererRef.current = null;
+      };
+    }, [canvasSize]);
+
+    // --- Re-render whenever config changes ---
+    useEffect(() => {
+      rendererRef.current?.render(config);
+    }, [config, canvasSize]);
+
+    // --- Coordinate helpers ---
     function getCanvasCoords(e: React.MouseEvent | React.TouchEvent) {
       const canvas = canvasRef.current;
       if (!canvas) return { x: 0, y: 0 };
       const rect = canvas.getBoundingClientRect();
       const clientX =
-        "touches" in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+        "touches" in e
+          ? e.touches[0].clientX
+          : (e as React.MouseEvent).clientX;
       const clientY =
-        "touches" in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+        "touches" in e
+          ? e.touches[0].clientY
+          : (e as React.MouseEvent).clientY;
       return {
         x: (clientX - rect.left) / rect.width,
         y: (clientY - rect.top) / rect.height,
@@ -147,7 +128,6 @@ const GradientCanvas = forwardRef<GradientCanvasHandle, GradientCanvasProps>(
       if (!canvas) return null;
       const hitNorm = HIT_RADIUS / canvas.width;
 
-      // Test in reverse so top-most drawn point wins
       for (let i = config.points.length - 1; i >= 0; i--) {
         const p = config.points[i];
         const dx = nx - p.x;
@@ -168,6 +148,7 @@ const GradientCanvas = forwardRef<GradientCanvasHandle, GradientCanvasProps>(
           onSelectPoint(null);
         }
       },
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       [config.points, onSelectPoint]
     );
 
@@ -192,10 +173,9 @@ const GradientCanvas = forwardRef<GradientCanvasHandle, GradientCanvasProps>(
       (e: React.MouseEvent) => {
         const { x, y } = getCanvasCoords(e);
         const hit = hitTest(x, y);
-        if (!hit) {
-          onAddPoint(x, y);
-        }
+        if (!hit) onAddPoint(x, y);
       },
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       [config.points, onAddPoint]
     );
 
@@ -204,24 +184,101 @@ const GradientCanvas = forwardRef<GradientCanvasHandle, GradientCanvasProps>(
         ref={containerRef}
         className="w-full h-full flex items-center justify-center"
       >
-        <canvas
-          ref={canvasRef}
-          width={canvasSize.width}
-          height={canvasSize.height}
-          className="rounded-2xl shadow-2xl cursor-crosshair touch-none"
-          style={{ maxWidth: "100%", maxHeight: "100%" }}
-          onMouseDown={handlePointerDown}
-          onMouseMove={handlePointerMove}
-          onMouseUp={handlePointerUp}
-          onMouseLeave={handlePointerUp}
-          onTouchStart={handlePointerDown}
-          onTouchMove={handlePointerMove}
-          onTouchEnd={handlePointerUp}
-          onDoubleClick={handleDoubleClick}
-        />
+        {/* Wrapper: positions gradient canvas + handle overlay together */}
+        <div
+          className="relative rounded-2xl shadow-2xl overflow-hidden"
+          style={{ width: canvasSize.width, height: canvasSize.height }}
+        >
+          {/* WebGL gradient canvas */}
+          <canvas
+            ref={canvasRef}
+            width={canvasSize.width}
+            height={canvasSize.height}
+            className="absolute inset-0 cursor-crosshair touch-none"
+            onMouseDown={handlePointerDown}
+            onMouseMove={handlePointerMove}
+            onMouseUp={handlePointerUp}
+            onMouseLeave={handlePointerUp}
+            onTouchStart={handlePointerDown}
+            onTouchMove={handlePointerMove}
+            onTouchEnd={handlePointerUp}
+            onDoubleClick={handleDoubleClick}
+          />
+
+          {/* HTML drag handles — purely visual, pointer events pass through to canvas */}
+          {config.points.map((point) => (
+            <PointHandle
+              key={point.id}
+              point={point}
+              isSelected={selectedPointId === point.id}
+              canvasWidth={canvasSize.width}
+              canvasHeight={canvasSize.height}
+            />
+          ))}
+        </div>
       </div>
     );
   }
 );
 
 export default GradientCanvas;
+
+// ---------------------------------------------------------------------------
+// Point handle — purely visual overlay; all pointer events pass through to canvas
+// ---------------------------------------------------------------------------
+
+interface PointHandleProps {
+  point: ColorPoint;
+  isSelected: boolean;
+  canvasWidth: number;
+  canvasHeight: number;
+}
+
+function PointHandle({
+  point,
+  isSelected,
+  canvasWidth,
+  canvasHeight,
+}: PointHandleProps) {
+  const left = point.x * canvasWidth - HANDLE_SIZE / 2;
+  const top  = point.y * canvasHeight - HANDLE_SIZE / 2;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left,
+        top,
+        width: HANDLE_SIZE,
+        height: HANDLE_SIZE,
+        pointerEvents: "none",
+      }}
+    >
+      {/* Outer glow ring */}
+      <div
+        style={{
+          position: "absolute",
+          inset: -4,
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.25)",
+        }}
+      />
+      {/* Colour fill */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          borderRadius: "50%",
+          background: point.color,
+          border: isSelected
+            ? "2.5px solid #ffffff"
+            : "1.5px solid rgba(255,255,255,0.75)",
+          boxShadow: isSelected
+            ? "0 0 0 3px rgba(255,255,255,0.7), 0 2px 8px rgba(0,0,0,0.35)"
+            : "0 2px 6px rgba(0,0,0,0.25)",
+          transition: "box-shadow 0.1s ease",
+        }}
+      />
+    </div>
+  );
+}

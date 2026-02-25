@@ -1,6 +1,6 @@
 import { GradientConfig } from "./types";
 import { hexToRgb } from "./color-utils";
-import { renderToOffscreenCanvas } from "./gradient-renderer";
+import { WebGLGradientRenderer } from "./webgl-renderer";
 
 function triggerDownload(url: string, filename: string) {
   const a = document.createElement("a");
@@ -10,14 +10,14 @@ function triggerDownload(url: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-/** Export as PNG at the given resolution */
+/** Export as PNG rendered by the WebGL shader at the given resolution */
 export async function exportPng(
   config: GradientConfig,
   width: number,
   height: number,
   filename = "gradient.png"
 ): Promise<void> {
-  const canvas = renderToOffscreenCanvas(config, width, height);
+  const canvas = WebGLGradientRenderer.renderOffscreen(config, width, height);
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) return reject(new Error("Failed to create PNG blob"));
@@ -28,7 +28,13 @@ export async function exportPng(
   });
 }
 
-/** Export as SVG using layered radialGradient elements */
+/**
+ * Export as SVG.
+ * Note: SVG cannot represent the WebGL shader output natively. This generates
+ * a best-effort approximation using layered <radialGradient> elements — the
+ * same model as the Canvas 2D version — which will visually differ from the
+ * shader render. For a pixel-perfect export, use PNG.
+ */
 export function exportSvg(
   config: GradientConfig,
   width: number,
@@ -55,7 +61,7 @@ export function exportSvg(
     })
     .join("\n");
 
-  const rects = points
+  const ellipses = points
     .map((p, i) => {
       const cx = p.x * width;
       const cy = p.y * height;
@@ -69,7 +75,7 @@ export function exportSvg(
 ${defs}
   </defs>
   <rect width="${width}" height="${height}" fill="${backgroundColor}" />
-${rects}
+${ellipses}
 </svg>`;
 
   const blob = new Blob([svg], { type: "image/svg+xml" });
@@ -77,7 +83,11 @@ ${rects}
   triggerDownload(url, filename);
 }
 
-/** Export as a CSS background property snippet */
+/**
+ * Export as a CSS background property snippet.
+ * Same approximation caveat as SVG — radial-gradient() cannot faithfully
+ * represent the shader output. Use PNG for a pixel-perfect export.
+ */
 export function exportCss(config: GradientConfig, filename = "gradient.css"): void {
   const { points, backgroundColor } = config;
 

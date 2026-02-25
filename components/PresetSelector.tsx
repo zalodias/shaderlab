@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { PRESETS, Preset } from "@/lib/presets";
-import { renderGradient } from "@/lib/gradient-renderer";
+import { WebGLGradientRenderer } from "@/lib/webgl-renderer";
 
 interface PresetSelectorProps {
   onSelect: (preset: Preset) => void;
@@ -25,7 +25,13 @@ function PresetThumbnail({
     if (!canvas) return;
     canvas.width = 80;
     canvas.height = 120;
-    renderGradient(canvas, preset.config);
+    try {
+      const renderer = new WebGLGradientRenderer(canvas);
+      renderer.render(preset.config);
+      renderer.destroy();
+    } catch {
+      // WebGL unavailable — leave canvas blank
+    }
   }, [preset]);
 
   return (
