@@ -1,0 +1,86 @@
+---
+alwaysApply: true
+---
+
+---
+
+description: Git conventions for commits, branches, and pull requests
+alwaysApply: true
+
+---
+
+# Commit Messages
+
+Use imperative mood and prepend a semantic emoji to describe the intent of the change. Keep the subject line under 72 characters. Add a body only when extra context is genuinely useful.
+
+**Format:** `<emoji> <short imperative description>`
+
+| Emoji | When to use                                    |
+| ----- | ---------------------------------------------- |
+| ✨    | Introduce a new feature                        |
+| 🐛    | Fix a bug                                      |
+| ♻️    | Refactor existing code without behavior change |
+| 📦    | Add, update, or remove packages/dependencies   |
+| 🎨    | Improve code structure, formatting, or style   |
+| 🔧    | Add or update configuration files              |
+| 📝    | Add or update documentation or copy            |
+
+**Examples:**
+
+```
+✨ Add dark mode toggle to settings page
+🐛 Fix null reference on empty cart checkout
+♻️ Extract auth logic into useAuth hook
+📦 Upgrade react to v19
+🎨 Sort imports and remove unused variables
+🔧 Add eslint rule for no-console
+📝 Update README with local dev setup steps
+```
+
+# Branch Names
+
+Use lowercase kebab-case. Prefix with the type of work followed by a slash.
+
+**Format:** `<type>/<short-description>`
+
+| Prefix      | When to use           |
+| ----------- | --------------------- |
+| `feature/`  | New feature           |
+| `fix/`      | Bug fix               |
+| `refactor/` | Code refactor         |
+| `chore/`    | Config, deps, tooling |
+| `docs/`     | Documentation only    |
+
+**Examples:**
+
+```
+feature/dark-mode-toggle
+fix/cart-null-reference
+refactor/auth-hook
+chore/upgrade-react-v19
+docs/local-dev-setup
+```
+
+# Pull Requests
+
+PR titles inherit from the branch name: use the emoji that matches the branch prefix, then the branch description in sentence case (kebab-case → Sentence case).
+
+**Format:** `<emoji> <Branch name in sentence case>`
+
+| Branch prefix | Emoji |
+| ------------- | ----- |
+| `feature/`    | ✨    |
+| `fix/`        | 🐛    |
+| `refactor/`   | ♻️    |
+| `chore/`      | 🔧    |
+| `docs/`       | 📝    |
+
+**Examples:**
+
+| Branch                     | PR title               |
+| -------------------------- | ---------------------- |
+| `feature/dark-mode-toggle` | ✨ Dark mode toggle    |
+| `fix/cart-null-reference`  | 🐛 Cart null reference |
+| `refactor/auth-hook`       | ♻️ Auth hook           |
+
+PR bodies should be empty.

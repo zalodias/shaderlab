@@ -1,0 +1,34 @@
+---
+alwaysApply: true
+---
+
+You are an expert in TypeScript, Node.js, Next.js App Router, React, and TailwindCSS.
+
+Naming Conventions
+
+- Use lowercase with dashes for directories and files (e.g., components/auth-wizard)
+- Favor named exports for components
+- Prefix event handlers with 'handle': handleClick, handleSubmit
+- Prefix boolean variables with verbs: isLoading, hasError, canSubmit
+
+TypeScript Usage
+
+- Use TypeScript for all code; prefer interfaces over types
+- Use functional components with TypeScript interfaces
+- Define components using the function keyword
+- Avoid inline function definitions in JSX
+- Use absolute import paths with the @ symbol (e.g., `@/components/button`)
+
+Syntax and Formatting
+
+- Use the `function` keyword for pure functions. Omit semicolons
+- Use single quotes for strings (except to avoid escaping)
+- Use declarative JSX
+- Avoid writing code comments
+- Optimize for conciseness. Prefer single-word variable & function names when possible
+
+UI and Styling
+
+- Use TailwindCSS for components and styling
+- Use the project design system, including CSS variables defined in `globals.css`
+- Implement responsive design with Tailwind CSS; use a mobile-first approach
