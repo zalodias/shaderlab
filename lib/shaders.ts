@@ -11,21 +11,25 @@ export const VERTEX_SHADER = /* glsl */ `
 `;
 
 /**
- * Fragment shader — Gaussian-weighted blend in OKLab color space.
+ * Fragment shader — Gaussian-weighted blend in OKLab color space,
+ * with optional distortion, swirl, grain, scale, rotation, and offset.
  *
- * For every pixel:
- *   1. Convert each control-point sRGB color → linear RGB → OKLab.
- *   2. Compute a Gaussian weight:  w_i = opacity_i * exp(-d² / (2σ²))
- *      where d is aspect-corrected distance and σ derives from the point's radius.
- *   3. Accumulate weighted OKLab colors; track total weight.
- *   4. Blend the weighted-average Lab color with the background Lab color,
- *      scaling by clamp(totalWeight, 0, 1).
- *   5. Convert back: OKLab → linear RGB → sRGB gamma.
+ * UV transformation pipeline (applied before blending):
+ *   1. offset    — translate the UV
+ *   2. rotation  — rotate around canvas center
+ *   3. scale     — zoom from canvas center
+ *   4. distortion — warp with layered noise (fbm-style)
+ *   5. swirl     — vortex rotation scaled by distance from center
+ *   6. grainMixer — perturb blending UVs with noise at color boundaries
+ *
+ * Post-processing:
+ *   7. grainOverlay — mix final color with B/W screen noise
  */
 export const FRAGMENT_SHADER = /* glsl */ `
   precision highp float;
 
   #define MAX_POINTS 16
+  #define PI 3.14159265358979323846
 
   uniform vec2  u_resolution;
   uniform int   u_numPoints;
@@ -35,9 +39,18 @@ export const FRAGMENT_SHADER = /* glsl */ `
   uniform float u_sigmas[MAX_POINTS];      // Gaussian σ in normalized units
   uniform vec3  u_background;              // linear RGB [0,1]
 
+  // Effect uniforms
+  uniform float u_distortion;   // 0–1
+  uniform float u_swirl;        // 0–1
+  uniform float u_grainMixer;   // 0–1
+  uniform float u_grainOverlay; // 0–1
+  uniform float u_scale;        // 0.01–4
+  uniform float u_rotation;     // radians
+  uniform vec2  u_offset;       // -1 to 1
+  uniform float u_vibrance;     // 0.5–2, chroma multiplier
+
   // --- Color space helpers ---------------------------------------------------
 
-  // sRGB → linear RGB (inverse gamma)
   float srgbToLinear(float c) {
     return c <= 0.04045
       ? c / 12.92
@@ -48,7 +61,6 @@ export const FRAGMENT_SHADER = /* glsl */ `
     return vec3(srgbToLinear(c.r), srgbToLinear(c.g), srgbToLinear(c.b));
   }
 
-  // linear RGB → sRGB (gamma encode)
   float linearToSrgb(float c) {
     c = clamp(c, 0.0, 1.0);
     return c <= 0.0031308
@@ -60,8 +72,6 @@ export const FRAGMENT_SHADER = /* glsl */ `
     return vec3(linearToSrgb(c.r), linearToSrgb(c.g), linearToSrgb(c.b));
   }
 
-  // linear RGB → OKLab
-  // Reference: https://bottosson.github.io/posts/oklab/
   vec3 linearRgbToOklab(vec3 c) {
     float l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
     float m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
@@ -78,7 +88,6 @@ export const FRAGMENT_SHADER = /* glsl */ `
     );
   }
 
-  // OKLab → linear RGB
   vec3 oklabToLinearRgb(vec3 c) {
     float l_ = c.x + 0.3963377774 * c.y + 0.2158037573 * c.z;
     float m_ = c.x - 0.1055613458 * c.y - 0.0638541728 * c.z;
@@ -95,10 +104,43 @@ export const FRAGMENT_SHADER = /* glsl */ `
     );
   }
 
+  // --- Noise helpers ---------------------------------------------------------
+
+  // Hash-based pseudo-random float in [0,1)
+  float hash(vec2 p) {
+    p = fract(p * vec2(127.1, 311.7));
+    p += dot(p, p + 19.19);
+    return fract(p.x * p.y);
+  }
+
+  // Value noise: smooth interpolation between hashed lattice points
+  float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f); // smoothstep
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+  }
+
+  // Fractional Brownian Motion — layered octaves of value noise
+  float fbm(vec2 p) {
+    float v = 0.0;
+    float amp = 0.5;
+    float freq = 1.0;
+    for (int i = 0; i < 5; i++) {
+      v   += amp * vnoise(p * freq);
+      amp  *= 0.5;
+      freq *= 2.1;
+    }
+    return v;
+  }
+
   // ---------------------------------------------------------------------------
 
   void main() {
-    // UV in [0,1], Y flipped to match top-left origin convention
     vec2 uv = vec2(
       gl_FragCoord.x / u_resolution.x,
       1.0 - gl_FragCoord.y / u_resolution.y
@@ -106,14 +148,72 @@ export const FRAGMENT_SHADER = /* glsl */ `
 
     float aspect = u_resolution.x / u_resolution.y;
 
-    vec3  labSum     = vec3(0.0);
-    float weightSum  = 0.0;
+    // --- UV transform pipeline ---
+
+    // 1. Offset (translate)
+    uv -= u_offset * 0.5;
+
+    // 2. Rotate around center
+    if (u_rotation != 0.0) {
+      vec2 centered = uv - 0.5;
+      float cosR = cos(u_rotation);
+      float sinR = sin(u_rotation);
+      centered = vec2(
+        cosR * centered.x - sinR * centered.y * (1.0 / aspect),
+        sinR * centered.x * aspect + cosR * centered.y
+      );
+      uv = centered + 0.5;
+    }
+
+    // 3. Scale from center
+    if (u_scale != 1.0) {
+      uv = (uv - 0.5) / u_scale + 0.5;
+    }
+
+    // 4. Distortion — fbm-based warp
+    if (u_distortion > 0.0) {
+      float strength = u_distortion * 0.35;
+      vec2 warpSeed = uv * 3.5;
+      float dx = fbm(warpSeed + vec2(1.7, 9.2)) - 0.5;
+      float dy = fbm(warpSeed + vec2(8.3, 2.8)) - 0.5;
+      uv += vec2(dx, dy) * strength;
+    }
+
+    // 5. Swirl — vortex rotation scaled by distance from center
+    if (u_swirl > 0.0) {
+      vec2 d = uv - 0.5;
+      d.x *= aspect;
+      float dist = length(d);
+      float angle = u_swirl * 4.0 * (1.0 - smoothstep(0.0, 0.7, dist));
+      float cosA = cos(angle);
+      float sinA = sin(angle);
+      vec2 rotated = vec2(
+        cosA * d.x - sinA * d.y,
+        sinA * d.x + cosA * d.y
+      );
+      rotated.x /= aspect;
+      uv = rotated + 0.5;
+    }
+
+    // --- Gaussian blending ---
+
+    // 6. grainMixer: perturb the UV used for distance calculations,
+    //    creating organic noise on color boundaries
+    vec2 blendUv = uv;
+    if (u_grainMixer > 0.0) {
+      float gm = u_grainMixer * 0.12;
+      blendUv.x += (fbm(uv * 8.0 + vec2(3.1, 7.4)) - 0.5) * gm;
+      blendUv.y += (fbm(uv * 8.0 + vec2(9.6, 1.2)) - 0.5) * gm;
+    }
+
+    vec3  labSum    = vec3(0.0);
+    float weightSum = 0.0;
 
     for (int i = 0; i < MAX_POINTS; i++) {
       if (i >= u_numPoints) break;
 
-      vec2  diff = uv - u_positions[i];
-      diff.x    *= aspect; // aspect-correct distance
+      vec2  diff = blendUv - u_positions[i];
+      diff.x    *= aspect;
 
       float d2  = dot(diff, diff);
       float sig = u_sigmas[i];
@@ -134,7 +234,18 @@ export const FRAGMENT_SHADER = /* glsl */ `
       finalLab = mix(bgLab, blendedLab, alpha);
     }
 
+    finalLab.y *= u_vibrance;
+    finalLab.z *= u_vibrance;
+
     vec3 linear = oklabToLinearRgb(finalLab);
-    gl_FragColor = vec4(linearToSrgbV(linear), 1.0);
+    vec3 color  = linearToSrgbV(linear);
+
+    // 7. grainOverlay: full-screen B/W noise mixed over final color
+    if (u_grainOverlay > 0.0) {
+      float grain = hash(gl_FragCoord.xy + vec2(0.5));
+      color = mix(color, vec3(grain), u_grainOverlay * 0.35);
+    }
+
+    gl_FragColor = vec4(color, 1.0);
   }
 `;

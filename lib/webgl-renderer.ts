@@ -1,6 +1,6 @@
-import { VERTEX_SHADER, FRAGMENT_SHADER } from "./shaders";
-import { GradientConfig } from "./types";
 import { hexToRgb } from "./color-utils";
+import { FRAGMENT_SHADER, VERTEX_SHADER } from "./shaders";
+import { GradientConfig } from "./types";
 
 const MAX_POINTS = 16;
 
@@ -67,7 +67,7 @@ export class WebGLGradientRenderer {
   private program: WebGLProgram;
   private quadBuffer: WebGLBuffer;
 
-  // Cached uniform locations
+  // Cached uniform locations — point data
   private u_resolution: WebGLUniformLocation;
   private u_numPoints: WebGLUniformLocation;
   private u_positions: WebGLUniformLocation;
@@ -76,10 +76,20 @@ export class WebGLGradientRenderer {
   private u_sigmas: WebGLUniformLocation;
   private u_background: WebGLUniformLocation;
 
+  // Cached uniform locations — effects
+  private u_distortion: WebGLUniformLocation;
+  private u_swirl: WebGLUniformLocation;
+  private u_grainMixer: WebGLUniformLocation;
+  private u_grainOverlay: WebGLUniformLocation;
+  private u_scale: WebGLUniformLocation;
+  private u_rotation: WebGLUniformLocation;
+  private u_offset: WebGLUniformLocation;
+  private u_vibrance: WebGLUniformLocation;
+
   constructor(canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl", {
-      preserveDrawingBuffer: true, // required for toBlob() / toDataURL() export
-      antialias: false,            // fragment shader output is already smooth
+      preserveDrawingBuffer: true,
+      antialias: false,
       alpha: false,
     }) as WebGLRenderingContext | null;
 
@@ -101,7 +111,6 @@ export class WebGLGradientRenderer {
     gl.enableVertexAttribArray(aPos);
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
-    // Cache uniform locations (array uniforms use [0] suffix as per WebGL spec)
     const u = (name: string): WebGLUniformLocation => {
       const loc = gl.getUniformLocation(this.program, name);
       if (loc === null) throw new Error(`Uniform "${name}" not found`);
@@ -115,6 +124,15 @@ export class WebGLGradientRenderer {
     this.u_opacities   = u("u_opacities[0]");
     this.u_sigmas      = u("u_sigmas[0]");
     this.u_background  = u("u_background");
+
+    this.u_distortion   = u("u_distortion");
+    this.u_swirl        = u("u_swirl");
+    this.u_grainMixer   = u("u_grainMixer");
+    this.u_grainOverlay = u("u_grainOverlay");
+    this.u_scale        = u("u_scale");
+    this.u_rotation     = u("u_rotation");
+    this.u_offset       = u("u_offset");
+    this.u_vibrance     = u("u_vibrance");
   }
 
   render(config: GradientConfig): void {
@@ -137,7 +155,7 @@ export class WebGLGradientRenderer {
       gl.uniform3f(this.u_background, 1.0, 1.0, 1.0);
     }
 
-    // --- Points (capped at MAX_POINTS) ---
+    // --- Points ---
     const points = config.points.slice(0, MAX_POINTS);
     const n = points.length;
 
@@ -159,11 +177,7 @@ export class WebGLGradientRenderer {
       }
 
       opacities[i] = p.opacity;
-
-      // Map radius [0,1] → Gaussian σ in normalized UV units.
-      // radius=1 means the blob comfortably covers the full canvas;
-      // a σ of radius/2 gives a visually appropriate Gaussian spread.
-      sigmas[i] = Math.max(p.radius * 0.5, 0.01);
+      sigmas[i]    = Math.max(p.radius * 0.35, 0.01);
     }
 
     gl.uniform1i(this.u_numPoints, n);
@@ -172,14 +186,25 @@ export class WebGLGradientRenderer {
     gl.uniform1fv(this.u_opacities, opacities);
     gl.uniform1fv(this.u_sigmas, sigmas);
 
+    // --- Effects ---
+    const e = config.effects;
+    gl.uniform1f(this.u_distortion,   e.distortion ?? 0);
+    gl.uniform1f(this.u_swirl,        e.swirl ?? 0);
+    gl.uniform1f(this.u_grainMixer,   e.grainMixer ?? 0);
+    gl.uniform1f(this.u_grainOverlay, e.grainOverlay ?? 0);
+    gl.uniform1f(this.u_scale,        e.scale ?? 1);
+    gl.uniform1f(this.u_rotation,     ((e.rotation ?? 0) * Math.PI) / 180);
+    gl.uniform2f(this.u_offset,       e.offsetX ?? 0, e.offsetY ?? 0);
+    gl.uniform1f(this.u_vibrance,     e.vibrance ?? 1);
+
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 
   /**
    * Render to an offscreen canvas at a specific resolution and return it.
-   * Used for high-res PNG export.
+   * Used for PNG export.
    */
-  static renderOffscreen(
+  static renderExport(
     config: GradientConfig,
     width: number,
     height: number

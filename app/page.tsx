@@ -4,7 +4,7 @@ import { ControlPanel } from '@/components/control-panel'
 import { GradientCanvas, GradientCanvasHandle } from '@/components/gradient-canvas'
 import { randomPastelHex } from '@/lib/color-utils'
 import { DEFAULT_CONFIG, PRESETS, Preset } from '@/lib/presets'
-import { ColorPoint, GradientConfig } from '@/lib/types'
+import { ColorPoint, DEFAULT_EFFECTS, GradientConfig, ShaderEffects } from '@/lib/types'
 import { useCallback, useRef, useState } from 'react'
 
 function generateId() {
@@ -14,7 +14,7 @@ function generateId() {
 function randomiseConfig(): GradientConfig {
   const bg = randomPastelHex()
   const count = 3 + Math.floor(Math.random() * 3)
-  const points: ColorPoint[] = Array.from({ length: count }, (_, i) => ({
+  const points: ColorPoint[] = Array.from({ length: count }, () => ({
     id: generateId(),
     x: 0.1 + Math.random() * 0.8,
     y: 0.1 + Math.random() * 0.8,
@@ -22,7 +22,7 @@ function randomiseConfig(): GradientConfig {
     radius: 0.4 + Math.random() * 0.6,
     opacity: 0.6 + Math.random() * 0.35,
   }))
-  return { points, backgroundColor: bg }
+  return { points, backgroundColor: bg, effects: DEFAULT_EFFECTS }
 }
 
 export default function Home() {
@@ -74,9 +74,17 @@ export default function Home() {
     setActivePresetId(null)
   }, [])
 
+  const updateEffects = useCallback((updates: Partial<ShaderEffects>) => {
+    setConfig((prev) => ({
+      ...prev,
+      effects: { ...prev.effects, ...updates },
+    }))
+    setActivePresetId(null)
+  }, [])
+
   const loadPreset = useCallback((preset: Preset) => {
     const points = preset.config.points.map((p) => ({ ...p, id: generateId() }))
-    setConfig({ ...preset.config, points })
+    setConfig({ ...preset.config, points, effects: DEFAULT_EFFECTS })
     setSelectedPointId(null)
     setActivePresetId(preset.id)
   }, [])
@@ -96,7 +104,7 @@ export default function Home() {
 
   return (
     <main className="relative w-screen h-screen bg-neutral-100 overflow-hidden flex items-center justify-center">
-      <div className="absolute inset-0 p-8">
+      <div className="absolute inset-0 p-8 pr-[calc(288px+3rem)]">
         <GradientCanvas
           ref={canvasRef}
           config={config}
@@ -108,19 +116,20 @@ export default function Home() {
         />
       </div>
 
-      <div className="absolute bottom-6 right-6 z-10">
+      <div className="absolute top-6 bottom-6 right-6 z-10">
         <ControlPanel
           config={config}
           selectedPointId={selectedPointId}
           activePresetId={activePresetId}
+          aspectRatio={aspectRatio}
           onSelectPoint={setSelectedPointId}
           onUpdatePoint={updatePoint}
           onAddPoint={handleAddPoint}
           onRemovePoint={removePoint}
           onUpdateBackground={updateBackground}
+          onUpdateEffects={updateEffects}
           onLoadPreset={loadPreset}
           onRandomise={handleRandomise}
-          aspectRatio={aspectRatio}
           onAspectRatioChange={setAspectRatio}
         />
       </div>
