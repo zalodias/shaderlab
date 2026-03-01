@@ -66,7 +66,7 @@ export function ControlPanel({
   }
 
   return (
-    <div className="w-72 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-neutral-200/60 flex flex-col overflow-hidden h-full">
+    <div className="w-72 bg-white/90 backdrop-blur-xl rounded-2xl border border-neutral-200/60 flex flex-col overflow-hidden h-full">
       {/* Header */}
       <div className="px-4 pt-4 pb-3 border-b border-neutral-100 shrink-0">
         <div className="flex items-center justify-between mb-3">

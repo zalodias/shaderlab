@@ -178,7 +178,7 @@ const GradientCanvas = forwardRef<GradientCanvasHandle, GradientCanvasProps>(
         className="w-full h-full flex items-center justify-center"
       >
         <div
-          className="relative rounded-2xl shadow-2xl overflow-hidden"
+          className="relative rounded-2xl overflow-hidden"
           style={{ width: canvasSize.width, height: canvasSize.height }}
         >
           <canvas
