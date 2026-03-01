@@ -29,6 +29,7 @@ Syntax and Formatting
 
 UI and Styling
 
-- Use TailwindCSS for components and styling
+- Use Shadcn + Base UI to build components
+- Use TailwindCSS to style the interface
 - Use the project design system, including CSS variables defined in `globals.css`
 - Implement responsive design with Tailwind CSS; use a mobile-first approach
