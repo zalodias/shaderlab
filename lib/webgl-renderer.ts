@@ -78,9 +78,13 @@ export class WebGLGradientRenderer {
 
   // Cached uniform locations — effects
   private u_distortion: WebGLUniformLocation;
+  private u_waveX: WebGLUniformLocation;
+  private u_waveXShift: WebGLUniformLocation;
+  private u_waveY: WebGLUniformLocation;
+  private u_waveYShift: WebGLUniformLocation;
   private u_swirl: WebGLUniformLocation;
-  private u_grainMixer: WebGLUniformLocation;
-  private u_grainOverlay: WebGLUniformLocation;
+  private u_warpGrain: WebGLUniformLocation;
+  private u_edgeGrain: WebGLUniformLocation;
   private u_scale: WebGLUniformLocation;
   private u_rotation: WebGLUniformLocation;
   private u_offset: WebGLUniformLocation;
@@ -126,9 +130,13 @@ export class WebGLGradientRenderer {
     this.u_background  = u("u_background");
 
     this.u_distortion   = u("u_distortion");
+    this.u_waveX        = u("u_waveX");
+    this.u_waveXShift   = u("u_waveXShift");
+    this.u_waveY        = u("u_waveY");
+    this.u_waveYShift   = u("u_waveYShift");
     this.u_swirl        = u("u_swirl");
-    this.u_grainMixer   = u("u_grainMixer");
-    this.u_grainOverlay = u("u_grainOverlay");
+    this.u_warpGrain = u("u_warpGrain");
+    this.u_edgeGrain = u("u_edgeGrain");
     this.u_scale        = u("u_scale");
     this.u_rotation     = u("u_rotation");
     this.u_offset       = u("u_offset");
@@ -189,9 +197,13 @@ export class WebGLGradientRenderer {
     // --- Effects ---
     const e = config.effects;
     gl.uniform1f(this.u_distortion,   e.distortion ?? 0);
+    gl.uniform1f(this.u_waveX,        e.waveX ?? 0);
+    gl.uniform1f(this.u_waveXShift,   e.waveXShift ?? 0);
+    gl.uniform1f(this.u_waveY,        e.waveY ?? 0);
+    gl.uniform1f(this.u_waveYShift,   e.waveYShift ?? 0);
     gl.uniform1f(this.u_swirl,        e.swirl ?? 0);
-    gl.uniform1f(this.u_grainMixer,   e.grainMixer ?? 0);
-    gl.uniform1f(this.u_grainOverlay, e.grainOverlay ?? 0);
+    gl.uniform1f(this.u_warpGrain, e.warpGrain ?? 0);
+    gl.uniform1f(this.u_edgeGrain, e.edgeGrain ?? 0);
     gl.uniform1f(this.u_scale,        e.scale ?? 1);
     gl.uniform1f(this.u_rotation,     ((e.rotation ?? 0) * Math.PI) / 180);
     gl.uniform2f(this.u_offset,       e.offsetX ?? 0, e.offsetY ?? 0);

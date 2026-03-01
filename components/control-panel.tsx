@@ -159,19 +159,39 @@ export function ControlPanel({
                 onChange={(v) => onUpdateEffects({ distortion: v })}
               />
               <Slider
+                label="Wave X"
+                value={effects.waveX}
+                onChange={(v) => onUpdateEffects({ waveX: v })}
+              />
+              <Slider
+                label="Wave X Shift"
+                value={effects.waveXShift}
+                onChange={(v) => onUpdateEffects({ waveXShift: v })}
+              />
+              <Slider
+                label="Wave Y"
+                value={effects.waveY}
+                onChange={(v) => onUpdateEffects({ waveY: v })}
+              />
+              <Slider
+                label="Wave Y Shift"
+                value={effects.waveYShift}
+                onChange={(v) => onUpdateEffects({ waveYShift: v })}
+              />
+              <Slider
                 label="Swirl"
                 value={effects.swirl}
                 onChange={(v) => onUpdateEffects({ swirl: v })}
               />
               <Slider
-                label="Grain Mixer"
-                value={effects.grainMixer}
-                onChange={(v) => onUpdateEffects({ grainMixer: v })}
+                label="Warp Grain"
+                value={effects.warpGrain}
+                onChange={(v) => onUpdateEffects({ warpGrain: v })}
               />
               <Slider
-                label="Grain Overlay"
-                value={effects.grainOverlay}
-                onChange={(v) => onUpdateEffects({ grainOverlay: v })}
+                label="Edge Grain"
+                value={effects.edgeGrain}
+                onChange={(v) => onUpdateEffects({ edgeGrain: v })}
               />
               <Slider
                 label="Scale"

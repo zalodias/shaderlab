@@ -15,15 +15,16 @@ export const VERTEX_SHADER = /* glsl */ `
  * with optional distortion, swirl, grain, scale, rotation, and offset.
  *
  * UV transformation pipeline (applied before blending):
- *   1. offset    — translate the UV
- *   2. rotation  — rotate around canvas center
- *   3. scale     — zoom from canvas center
- *   4. distortion — warp with layered noise (fbm-style)
- *   5. swirl     — vortex rotation scaled by distance from center
- *   6. grainMixer — perturb blending UVs with noise at color boundaries
+//  *   1. offset      — translate the UV
+ *   2. rotation    — rotate around canvas center
+ *   3. scale       — zoom from canvas center
+ *   4. distortion  — warp with layered noise (fbm-style)
+ *   4b. wave       — structured sine wave warp (waveX/Y + shift)
+ *   5. swirl       — vortex rotation scaled by distance from center
+ *   6. warpGrain  — perturb blending UVs with noise at color boundaries
  *
  * Post-processing:
- *   7. grainOverlay — mix final color with B/W screen noise
+ *   7. edgeGrain — dark particle grain concentrated at color transition zones
  */
 export const FRAGMENT_SHADER = /* glsl */ `
   precision highp float;
@@ -41,9 +42,13 @@ export const FRAGMENT_SHADER = /* glsl */ `
 
   // Effect uniforms
   uniform float u_distortion;   // 0–1
+  uniform float u_waveX;        // 0–1
+  uniform float u_waveXShift;   // 0–1
+  uniform float u_waveY;        // 0–1
+  uniform float u_waveYShift;   // 0–1
   uniform float u_swirl;        // 0–1
-  uniform float u_grainMixer;   // 0–1
-  uniform float u_grainOverlay; // 0–1
+  uniform float u_warpGrain;  // 0–1
+  uniform float u_edgeGrain;  // 0–1
   uniform float u_scale;        // 0.01–4
   uniform float u_rotation;     // radians
   uniform vec2  u_offset;       // -1 to 1
@@ -106,11 +111,18 @@ export const FRAGMENT_SHADER = /* glsl */ `
 
   // --- Noise helpers ---------------------------------------------------------
 
-  // Hash-based pseudo-random float in [0,1)
+  // Hash-based pseudo-random float in [0,1) — for UV-space noise (fbm, vnoise)
   float hash(vec2 p) {
     p = fract(p * vec2(127.1, 311.7));
     p += dot(p, p + 19.19);
     return fract(p.x * p.y);
+  }
+
+  // Grain hash — sin-based, no periodicity with integer pixel coords.
+  // The standard fract-multiply hash cycles every 10px with half-integer
+  // gl_FragCoord inputs; sin avoids that completely.
+  float grainHash(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
   }
 
   // Value noise: smooth interpolation between hashed lattice points
@@ -179,6 +191,12 @@ export const FRAGMENT_SHADER = /* glsl */ `
       uv += vec2(dx, dy) * strength;
     }
 
+    // 4b. Wave distortion — structured sine warp
+    if (u_waveX > 0.0 || u_waveY > 0.0) {
+      uv.x += sin(uv.y * PI * 4.0 + u_waveXShift * PI * 2.0) * u_waveX * 0.15;
+      uv.y += sin(uv.x * PI * 4.0 + u_waveYShift * PI * 2.0) * u_waveY * 0.15;
+    }
+
     // 5. Swirl — vortex rotation scaled by distance from center
     if (u_swirl > 0.0) {
       vec2 d = uv - 0.5;
@@ -197,17 +215,21 @@ export const FRAGMENT_SHADER = /* glsl */ `
 
     // --- Gaussian blending ---
 
-    // 6. grainMixer: perturb the UV used for distance calculations,
+    // 6. warpGrain: perturb the UV used for distance calculations,
     //    creating organic noise on color boundaries
     vec2 blendUv = uv;
-    if (u_grainMixer > 0.0) {
-      float gm = u_grainMixer * 0.12;
+    if (u_warpGrain > 0.0) {
+      float gm = u_warpGrain * 0.12;
       blendUv.x += (fbm(uv * 8.0 + vec2(3.1, 7.4)) - 0.5) * gm;
       blendUv.y += (fbm(uv * 8.0 + vec2(9.6, 1.2)) - 0.5) * gm;
     }
 
-    vec3  labSum    = vec3(0.0);
-    float weightSum = 0.0;
+    vec3  labSum         = vec3(0.0);
+    float rawWeightSum   = 0.0;
+    float sharpWeightSum = 0.0;
+    float maxW           = 0.0;
+
+    float sharpness = 1.0;
 
     for (int i = 0; i < MAX_POINTS; i++) {
       if (i >= u_numPoints) break;
@@ -217,34 +239,48 @@ export const FRAGMENT_SHADER = /* glsl */ `
 
       float d2  = dot(diff, diff);
       float sig = u_sigmas[i];
-      float w   = u_opacities[i] * exp(-d2 / (2.0 * sig * sig));
+      float raw = u_opacities[i] * exp(-d2 / (2.0 * sig * sig));
+      float w   = pow(raw, sharpness);
 
-      labSum    += w * linearRgbToOklab(u_colors[i]);
-      weightSum += w;
+      maxW            = max(maxW, w);
+      rawWeightSum   += raw;
+      sharpWeightSum += w;
+      labSum         += w * linearRgbToOklab(u_colors[i]);
     }
+
+    // Spray factor: how contested this pixel is between multiple blob colors.
+    // dominance → 1 when a single blob wins cleanly (blob center) → no grain.
+    // dominance → 0 when blobs compete equally (color boundary) → full grain.
+    // Masked by rawWeightSum so grain stays zero in pure background.
+    float dominance   = (sharpWeightSum > 0.0001) ? clamp(maxW / sharpWeightSum, 0.0, 1.0) : 1.0;
+    float competition = 1.0 - dominance;
+    float sprayFactor = competition * competition * clamp(rawWeightSum * 4.0, 0.0, 1.0);
 
     vec3 bgLab = linearRgbToOklab(u_background);
 
     vec3 finalLab;
-    if (weightSum < 0.0001) {
+    float alpha = clamp(rawWeightSum, 0.0, 1.0);
+    if (sharpWeightSum < 0.0001) {
       finalLab = bgLab;
     } else {
-      vec3 blendedLab = labSum / weightSum;
-      float alpha = clamp(weightSum, 0.0, 1.0);
+      vec3 blendedLab = labSum / sharpWeightSum;
       finalLab = mix(bgLab, blendedLab, alpha);
     }
 
     finalLab.y *= u_vibrance;
     finalLab.z *= u_vibrance;
 
+    // 7. edgeGrain: lightness-only spray grain in OKLab, so hue and saturation
+    //    are never touched. Grain pixels are always the same colour as their
+    //    neighbours — just randomly brighter. Applied before sRGB conversion
+    //    so the variation is perceptually uniform.
+    if (u_edgeGrain > 0.0) {
+      float grain = grainHash(gl_FragCoord.xy);
+      finalLab.x = clamp(finalLab.x + grain * u_edgeGrain * sprayFactor * 0.5, 0.0, 1.0);
+    }
+
     vec3 linear = oklabToLinearRgb(finalLab);
     vec3 color  = linearToSrgbV(linear);
-
-    // 7. grainOverlay: full-screen B/W noise mixed over final color
-    if (u_grainOverlay > 0.0) {
-      float grain = hash(gl_FragCoord.xy + vec2(0.5));
-      color = mix(color, vec3(grain), u_grainOverlay * 0.35);
-    }
 
     gl_FragColor = vec4(color, 1.0);
   }
